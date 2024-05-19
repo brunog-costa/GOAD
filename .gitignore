@@ -17,5 +17,8 @@ tfplan
 ad/PURPLE
 ad/REDLAB
 ad/EDRLAB
+*.lock.hcl
+.infracost/*
+.terraform/*
 #ansible/roles/edr
 #ansible/edr.yml
