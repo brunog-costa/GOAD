@@ -1,36 +1,35 @@
 # VPC
 
-resource "aws_vpc" "goad_vpc" { 
-  cidr_block = var.goad_cidr 
-  tags = { 
-    Name = "GOAD" 
-    Lab = "GOAD" 
-  } 
-} 
+resource "aws_vpc" "goad_vpc" {
+  cidr_block = var.goad_cidr
+  tags = {
+    Name = "GOAD"
+    Lab  = "GOAD"
+  }
+}
 
 
 # Subnets
-
 resource "aws_subnet" "goad_private_network" {
-  vpc_id     = aws_vpc.goad_vpc.id
-  cidr_block = var.goad_private_cidr
+  vpc_id            = aws_vpc.goad_vpc.id
+  cidr_block        = var.goad_private_cidr
   availability_zone = var.zone
-  
+
   tags = {
-    Name = "GOAD--private-network"
-    Lab = "GOAD"
+    Name = "GOAD-private-network"
+    Lab  = "GOAD"
   }
 }
 
 resource "aws_subnet" "goad_public_network" {
-  vpc_id     = aws_vpc.goad_vpc.id
-  cidr_block = var.goad_public_cidr
+  vpc_id            = aws_vpc.goad_vpc.id
+  cidr_block        = var.goad_public_cidr
   availability_zone = var.zone
-  depends_on = [aws_internet_gateway.internet_gateway]
+  depends_on        = [aws_internet_gateway.internet_gateway]
 
   tags = {
     Name = "GOAD-public-network"
-    Lab = "GOAD"
+    Lab  = "GOAD"
   }
 }
 
@@ -45,7 +44,7 @@ resource "aws_route_table" "goad_public_table" {
 
   tags = {
     Name = "GOAD Route table"
-    Lab = "GOAD"
+    Lab  = "GOAD"
   }
 }
 
@@ -54,7 +53,37 @@ resource "aws_route_table_association" "b" {
   route_table_id = aws_route_table.goad_public_table.id
 }
 
-# Security group
+# Security group - Jump Machine
+resource "aws_security_group" "goad_provision_security_group" {
+  name        = "GOAD Provisions Security Group"
+  description = "Allow traffic necessary to use GOAD"
+  vpc_id      = aws_vpc.goad_vpc.id
+
+  tags = {
+    Name = "GOAD Security Group"
+    Lab  = "GOAD"
+  }
+}
+
+resource "aws_vpc_security_group_egress_rule" "allow_twingate_egress" {
+  security_group_id = aws_security_group.goad_provision_security_group.id
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "-1"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "allow_jumpbox_whitelist_ingress" {
+  security_group_id = aws_security_group.goad_provision_security_group.id
+  cidr_ipv4         = var.whitelist_cidr
+  ip_protocol       = "-1"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "allow_jumpbox_goadr_ingress" {
+  security_group_id = aws_security_group.goad_provision_security_group.id
+  cidr_ipv4         = var.goad_cidr
+  ip_protocol       = "-1"
+}
+
+# Security group - Target Machines
 resource "aws_security_group" "goad_security_group" {
   name        = "GOAD Security Group"
   description = "Allow traffic necessary to use GOAD"
@@ -62,7 +91,7 @@ resource "aws_security_group" "goad_security_group" {
 
   tags = {
     Name = "GOAD Security Group"
-    Lab = "GOAD"
+    Lab  = "GOAD"
   }
 }
 
@@ -112,7 +141,7 @@ resource "aws_vpc_security_group_egress_rule" "allow_icmp_egress" {
   security_group_id = aws_security_group.goad_security_group.id
   cidr_ipv4         = "0.0.0.0/0"
   ip_protocol       = "icmp"
-  from_port           = "-1"
+  from_port         = "-1"
   to_port           = "-1"
 }
 
@@ -122,7 +151,7 @@ resource "aws_internet_gateway" "internet_gateway" {
 
   tags = {
     Name = "Internet Gateway"
-    Lab = "GOAD"
+    Lab  = "GOAD"
   }
 }
 

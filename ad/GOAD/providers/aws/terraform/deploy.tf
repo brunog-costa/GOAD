@@ -1,8 +1,15 @@
+# lil'crazy guy's PR https://github.com/ArnCo/GOAD/blob/main/ad/GOAD/providers/aws/inventory
+
 terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
       version = "~> 5.0"
+    }
+
+    twingate = {
+      source  = "Twingate/twingate"
+      version = "~>3.0.4"
     }
   }
 }
@@ -71,20 +78,20 @@ resource "aws_key_pair" "goad-windows-keypair" {
   public_key = tls_private_key.windows.public_key_openssh
 }
 
-data "aws_ami" "windows_2019"{
+data "aws_ami" "windows_2019" {
   most_recent = true
-  owners = ["amazon"]
+  owners      = ["amazon"]
 
   filter {
-    name = "name"
+    name   = "name"
     values = ["Windows_Server-2019-English-Full-Base*"]
   }
 }
 
 resource "aws_network_interface" "goad-vm-nic" {
-  for_each = var.vm_config
-  subnet_id   = aws_subnet.goad_private_network.id
-  private_ips = [each.value.private_ip_address]
+  for_each        = var.vm_config
+  subnet_id       = aws_subnet.goad_private_network.id
+  private_ips     = [each.value.private_ip_address]
   security_groups = [aws_security_group.goad_security_group.id]
   tags = {
     Lab = "GOAD"
@@ -94,23 +101,23 @@ resource "aws_network_interface" "goad-vm-nic" {
 resource "aws_instance" "goad-vm" {
   for_each = var.vm_config
 
-  ami                    = data.aws_ami.windows_2019.id
-  instance_type          = each.value.instance_type
+  ami           = data.aws_ami.windows_2019.id
+  instance_type = each.value.instance_type
 
   network_interface {
     network_interface_id = aws_network_interface.goad-vm-nic[each.key].id
-    device_index = 0
+    device_index         = 0
   }
 
   user_data = templatefile("${path.module}/user_data/instance-init.ps1.tpl", {
-                                username = var.username
-                                password = each.value.password
-                                domain = each.value.domain
-                           })
+    username = var.username
+    password = each.value.password
+    domain   = each.value.domain
+  })
   key_name = "GOAD-windows-keypair"
   tags = {
     Name = "GOAD-${each.value.name}"
-    Lab = "GOAD"
+    Lab  = "GOAD"
   }
   provisioner "local-exec" {
     command = "echo '${tls_private_key.windows.private_key_pem}' > ../ssh_keys/id_rsa_windows && echo '${tls_private_key.windows.public_key_pem}' > ../ssh_keys/id_rsa_windows.pub && chmod 600 ../ssh_keys/id_rsa*"

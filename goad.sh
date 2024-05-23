@@ -9,7 +9,7 @@ LAB=
 PROVIDER=
 METHOD=
 JOB=
-PROVIDERS="virtualbox vmware azure proxmox"
+PROVIDERS="virtualbox vmware azure proxmox aws"
 LABS=$(ls -A ad/ |grep -v 'TEMPLATE')
 TASKS="check install start stop status restart destroy disablevagrant enablevagrant"
 ANSIBLE_PLAYBOOKS="edr.yml build.yml ad-servers.yml ad-parent_domain.yml ad-child_domain.yml ad-members.yml ad-trusts.yml ad-data.yml ad-gmsa.yml laps.yml ad-relations.yml adcs.yml ad-acl.yml servers.yml security.yml vulnerabilities.yml reboot.yml elk.yml sccm-install.yml sccm-config.yml"
@@ -230,6 +230,52 @@ install_providing(){
           ssh -o "StrictHostKeyChecking no" -i "ad/$lab/providers/$provider/ssh_keys/ubuntu-jumpbox.pem" goad@$public_ip 'bash -s' <scripts/setup_azure.sh
 
           echo "${OK} Ready to launch provisioning"
+        fi
+        ;;
+    "aws")
+      if [ -d "ad/$lab/providers/$provider/terraform" ]; then
+          cd "ad/$lab/providers/$provider/terraform"
+          echo "${OK} Initializing Terraform..."
+          terraform init
+
+          result=$?
+          if [ ! $result -eq 0 ]; then
+            echo "${ERROR} terraform init finish with error abort"
+            exit 1
+          fi
+
+          echo "${OK} Apply Terraform..."
+          terraform apply 
+          result=$?
+          if [ ! $result -eq 0 ]; then
+            echo "${ERROR} terraform apply finish with error abort"
+            exit 1
+          fi
+
+          echo "Installing Twingate Client"          
+          curl -s https://binaries.twingate.com/client/linux/install.sh | sudo bash
+
+          echo "Seting Up Twingate Client" 
+          sudo twingate setup
+
+          echo "Connecting to external network" 
+          twingate desktop-start 
+
+          # Get the public IP address of the VM
+          echo "${OK} Getting jumpbox IP address..."
+          public_ip=$(terraform output -raw ubuntu-jumpbox-ip)
+          print_azure_info
+          cd -
+
+          echo "${OK} Ready to launch provisioning"
+
+          echo "${OK} Rsync goad to jumpbox"
+          rsync -a --exclude-from='.gitignore' -e "ssh -o 'StrictHostKeyChecking no' -i $CURRENT_DIR/ad/$lab/providers/$provider/ssh_keys/ubuntu-jumpbox.pem" "$CURRENT_DIR/" goad@$public_ip:~/GOAD/
+
+          echo "${OK} Running setup script on jumpbox..."
+          ssh -o "StrictHostKeyChecking no" -i "ad/$lab/providers/$provider/ssh_keys/ubuntu-jumpbox.pem" goad@$public_ip 'bash -s' <scripts/setup_azure.sh
+
+          echo "${OK} Ready to launch provisioning"
       else
         echo "${ERROR} folder ad/$lab/providers/$provider/terraform not found"
         exit 1
@@ -283,7 +329,7 @@ install_provisioning(){
             ;;
         esac
       ;;
-    "azure")
+    "azure"|"aws")
 
           cd "ad/$lab/providers/$provider/terraform"
           public_ip=$(terraform output -raw ubuntu-jumpbox-ip)

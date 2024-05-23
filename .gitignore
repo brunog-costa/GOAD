@@ -20,5 +20,9 @@ ad/EDRLAB
 *.lock.hcl
 .infracost/*
 .terraform/*
+*id_rsa*
+*.pem
+*.key
+TODO.md
 #ansible/roles/edr
 #ansible/edr.yml
