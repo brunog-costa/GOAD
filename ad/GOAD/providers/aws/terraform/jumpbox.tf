@@ -26,7 +26,7 @@ resource "aws_key_pair" "goad-jumpbox-keypair" {
 }
 
 resource "aws_network_interface" "goad-vm-nic-jumpbox" {
-  subnet_id       = aws_subnet.goad_public_network.id
+  subnet_id       = aws_subnet.goad_private_network.id
   private_ips     = ["192.168.56.100"]
   security_groups = [aws_security_group.goad_security_group.id]
   tags = {
@@ -55,11 +55,11 @@ resource "aws_instance" "goad-vm-jumpbox" {
   }
   key_name = "GOAD-jumpbox-keypair"
   
-  user_data = templatefile("${path.module}/user_data/instance-init.sh.tpl", {
+  user_data = templatefile("${path.module}/user_data/instance-init.tpl", {
     username      = var.jumpbox_username
-    url           = "https://${var.twingate_network}.twingate.com"
-    access_token  = "${twingate_connector_tokens.aws_connector_tokens.access_token}"
-    refrent_token = "${twingate_connector_tokens.aws_connector_tokens.refresh_token}"
+    network_name = var.twingate_network
+    access_token  = twingate_connector_tokens.aws_connector_tokens.access_token
+    refrent_token = twingate_connector_tokens.aws_connector_tokens.refresh_token
   })
 
   tags = {
