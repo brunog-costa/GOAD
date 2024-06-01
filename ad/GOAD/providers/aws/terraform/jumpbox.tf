@@ -15,6 +15,22 @@ resource "twingate_connector_tokens" "aws_connector_tokens" {
   connector_id = twingate_connector.aws_connector.id
 }
 
+resource "twingate_resource" "lab_network" {
+  name              = "GOAD-jumpbox"
+  address           = "192.168.56.100"
+  remote_network_id = twingate_remote_network.aws_network.id
+  
+  protocols = {
+    allow_icmp = true
+    tcp = {
+      policy = "ALLOW_ALL"
+    }
+    udp = {
+      policy = "ALLOW_ALL"
+    }
+  }
+}
+
 resource "tls_private_key" "ssh" {
   algorithm = "RSA"
   rsa_bits  = 4096
@@ -26,41 +42,50 @@ resource "aws_key_pair" "goad-jumpbox-keypair" {
 }
 
 resource "aws_network_interface" "goad-vm-nic-jumpbox" {
-  subnet_id       = aws_subnet.goad_private_network.id
+  subnet_id       = aws_subnet.goad_public_network.id
   private_ips     = ["192.168.56.100"]
-  security_groups = [aws_security_group.goad_security_group.id]
+  security_groups = [aws_security_group.goad_provision_security_group.id]
+  attachment {
+    instance = aws_instance.goad-vm-jumpbox.id
+    device_index = 1 
+  }
   tags = {
     Lab = "GOAD"
   }
 }
 
-data "aws_ami" "twingate" {
+data "aws_ami" "ubuntu_latest" {
   most_recent = true
+  owners      = ["amazon"]
+
   filter {
-    name = "name"
-    values = [
-      "twingate/images/hvm-ssd/twingate-amd64-*",
-    ]
+    name   = "name"
+    values = ["*ubuntu-noble-24.04-amd64-server*"]
   }
-  owners = ["617935088040"]
 }
 
 resource "aws_instance" "goad-vm-jumpbox" {
-  ami           = data.aws_ami.twingate.id
+  ami           = data.aws_ami.ubuntu_latest.id
   instance_type = "t2.medium"
 
-  network_interface {
-    network_interface_id = aws_network_interface.goad-vm-nic-jumpbox.id
-    device_index         = 0
-  }
-  key_name = "GOAD-jumpbox-keypair"
-  
-  user_data = templatefile("${path.module}/user_data/instance-init.tpl", {
-    username      = var.jumpbox_username
-    network_name = var.twingate_network
-    access_token  = twingate_connector_tokens.aws_connector_tokens.access_token
-    refrent_token = twingate_connector_tokens.aws_connector_tokens.refresh_token
-  })
+  # network_interface {
+  #   network_interface_id = aws_network_interface.goad-vm-nic-jumpbox.id
+  #   device_index         = 1
+  # }
+
+  associate_public_ip_address = true
+  availability_zone = var.zone
+  key_name                    = "GOAD-jumpbox-keypair"
+
+  user_data = <<EOF
+#!/bin/bash
+usermod -l "${var.jumpbox_username}" ubuntu  
+usermod -d "/home/${var.jumpbox_username}" -m ${var.jumpbox_username}
+sed -i "s/ubuntu/${var.jumpbox_username}/" /etc/sudoers.d/90-cloud-init-users
+set -e
+# Install Twingate
+curl "https://binaries.twingate.com/connector/setup.sh" | sudo TWINGATE_ACCESS_TOKEN="${twingate_connector_tokens.aws_connector_tokens.access_token}" TWINGATE_REFRESH_TOKEN="${twingate_connector_tokens.aws_connector_tokens.refresh_token}" TWINGATE_NETWORK="${var.twingate_network}" TWINGATE_LABEL_DEPLOYED_BY="linux" bash
+  EOF 
 
   tags = {
     Name = "GOAD-jumpbox"
@@ -78,6 +103,10 @@ resource "aws_instance" "goad-vm-jumpbox" {
 
   provisioner "local-exec" {
     command = "echo '${tls_private_key.ssh.private_key_openssh}' > ../ssh_keys/ubuntu-jumpbox.pem && echo '${tls_private_key.ssh.public_key_openssh}' > ../ssh_keys/ubuntu-jumpbox.pub && chmod 600 ../ssh_keys/*"
+  }
+
+  lifecycle {
+    ignore_changes = [associate_public_ip_address]
   }
 }
 

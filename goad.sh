@@ -267,6 +267,8 @@ install_providing(){
           print_azure_info
           cd -
 
+          #Awaits a few minutes until twingate is online 
+          sleep 1m 30s
           echo "${OK} Ready to launch provisioning"
 
           echo "${OK} Rsync goad to jumpbox"

@@ -1,3 +1,3 @@
 output "ubuntu-jumpbox-ip" {
-  value = aws_network_interface.goad-vm-nic-jumpbox.private_dns_name
+  value = "192.168.56.100"
 }
